@@ -7,25 +7,14 @@
 #include <signal.h>
 
 #define SERVER "127.0.0.1"
-#define BUF_SIZE 512	//Max length of buffer
+#define BUF_SIZE 512	
 #define PORT 8888	//The port on which to send data
-
-int s;
 
 void finish(char *er)
 {
 	perror(er);
 	exit(1);
 }
-
-/*
-void catch_sigint(int signum)
-{
-    close(s);
-    perror("\nClose by Ctrl+C\n");
-    exit(1);
-}
-*/
 
 void input_integer(long int *n)
 {
@@ -44,6 +33,7 @@ void input_integer(long int *n)
 
 int main(void)
 {
+    int s;
 	struct sockaddr_in si_other;
 	int i, slen=sizeof(si_other);
 	char buf[BUF_SIZE];
@@ -53,8 +43,6 @@ int main(void)
 	{
 		finish("socket() error");
 	}
-
-    //signal(SIGINT, catch_sigint);
     
 	memset((char *) &si_other, 0, sizeof(si_other));
 	si_other.sin_family = AF_INET;
@@ -66,28 +54,20 @@ int main(void)
 		exit(1);
 	}
 
-	//while(1)
-	//{
-
     input_integer(&n);
 		
-	//send the message
 	if (sendto(s, &n, sizeof(n) , 0 , (struct sockaddr *) &si_other, slen)==-1)
 	{
 		finish("sendto()");
 	}
 		
-	//receive ah reply and print it
-	//clear the buffer by filling null, it might have previously received data
 	memset(buf,'\0', BUF_SIZE);
-	//try to receive some data, this is a blocking call
 	if (recvfrom(s, buf, BUF_SIZE, 0, (struct sockaddr *) &si_other, &slen) == -1)
 	{
 		finish("recvfrom()");
 	}
 		
 	printf("Server received %d\n", *(int*)buf);
-	//}
 
 	close(s);
 	return 0;
