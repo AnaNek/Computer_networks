@@ -11,8 +11,8 @@
 
 void finish(char *er)
 {
-	perror(er);
-	exit(1);
+    perror(er);
+    exit(1);
 }
 
 void translate(int num, int divider)
@@ -66,50 +66,50 @@ void translate(int num, int divider)
 int main(void)
 {
     int s;
-	struct sockaddr_in si_me, si_other;
+    struct sockaddr_in si_me, si_other;
 	
-	int i, slen = sizeof(si_other) , recv_len;
-	char buf[BUF_SIZE];
-	int num = 0;
+    int i, slen = sizeof(si_other) , recv_len;
+    char buf[BUF_SIZE];
+    int num = 0;
 	
-	if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-	{
-		finish("socket");
-	}
+    if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
+    {
+        finish("socket");
+    }
 	
-	memset((char *) &si_me, 0, sizeof(si_me));
+    memset((char *) &si_me, 0, sizeof(si_me));
 	
-	si_me.sin_family = AF_INET;
-	si_me.sin_port = htons(PORT);
-	si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+    si_me.sin_family = AF_INET;
+    si_me.sin_port = htons(PORT);
+    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
 	
-	if( bind(s , (struct sockaddr*)&si_me, sizeof(si_me) ) == -1)
-	{
-	    finish("bind");
-	}
+    if( bind(s , (struct sockaddr*)&si_me, sizeof(si_me) ) == -1)
+    {
+        finish("bind");
+    }
 	
-	printf("Waiting...\n");
+    printf("Waiting...\n");
 		
-	if ((recv_len = recvfrom(s, buf, BUF_SIZE, 0, (struct sockaddr *) &si_other, &slen)) == -1)
-	{
-	    finish("recvfrom()");
-	}
+    if ((recv_len = recvfrom(s, buf, BUF_SIZE, 0, (struct sockaddr *) &si_other, &slen)) == -1)
+    {
+        finish("recvfrom()");
+    }
 		
-	printf("Received packet from %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
+    printf("Received packet from %s:%d\n", inet_ntoa(si_other.sin_addr), ntohs(si_other.sin_port));
 	
-	num = *(int*)buf;		
-	printf("Received: %d\n" , num);
+    num = *(int*)buf;		
+    printf("Received: %d\n" , num);
 	
-	translate(num, 2);
-	translate(num, 8);
-	translate(num, 15);
-	translate(num, 16);	
+    translate(num, 2);
+    translate(num, 8);
+    translate(num, 15);
+    translate(num, 16);	
 
-	if (sendto(s, buf, recv_len, 0, (struct sockaddr*) &si_other, slen) == -1)
-	{
-		finish("sendto()");
-	}
+    if (sendto(s, buf, recv_len, 0, (struct sockaddr*) &si_other, slen) == -1)
+    {
+        finish("sendto()");
+    }
 
-	close(s);
-	return 0;
+    close(s);
+    return 0;
 }
