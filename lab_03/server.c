@@ -10,6 +10,14 @@ pthread_cond_t cond2 = PTHREAD_COND_INITIALIZER;
 
 char dir[1024];
 
+/* 
+   Добавить обработчик сигнала 
+   Написать структуру списка и функции для работы с ней
+   Кидать в поток указатель на голову списка ???
+   Понять, что делать с директорией (как ее нормально передавать)
+   Собирать статистику 
+   Проверить везде ли все дескрипторы закрыты и освобождена ли память
+*/
 int main(int argc, char *argv[])
 {
 
@@ -27,7 +35,7 @@ int main(int argc, char *argv[])
     char path[1024];
     //char dir[1024];
     char method[3];
-    struct node *p;
+    struct node *list_node;
     int fd;
     int total_pages = 0, total_bytes = 0;
     fd_set set;
@@ -78,7 +86,7 @@ int main(int argc, char *argv[])
     FD_ZERO(&set);
     FD_SET(server_socket_fd, &set);
          
-    printf("ADDR %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+    printf("ADDRESS %s:%d\n", inet_ntoa(address.sin_addr), ntohs(address.sin_port));
     if (bind(server_socket_fd, (struct sockaddr *) &address, sizeof(address)) < 0)
     {
         perror("Error in bind");
@@ -114,8 +122,12 @@ int main(int argc, char *argv[])
         printf("Client connected to port: %d\n", ntohs(caddr.sin_port));
         
         pthread_mutex_lock(&mtx);
-        printf("CLIENT\n");
-        fl = 1;
+        //fl = 1;
+        list_node = malloc(sizeof(struct node));
+        list_node -> fd = client_socket_fd;
+        list_node -> next = head;
+        head = list_node;
+        
         pthread_cond_signal(&cond);
         pthread_mutex_unlock(&mtx);
         
@@ -157,12 +169,16 @@ void *client_handler(void *client_fd)
 		printf("Thread %lu \n", pthread_self());
 		pthread_mutex_lock(&mtx);
 		    
-		while (!fl)
+		while (head == NULL)
 		{
 		    pthread_cond_wait(&cond, &mtx);
 		}
 		
-		client_socket_fd = *(int *)client_fd;
+		p = head;
+		client_socket_fd = p->fd;
+        head = head -> next;
+        
+		//client_socket_fd = *(int *)client_fd;
 		printf("Thread %lu started...\n", pthread_self());
 		pthread_mutex_unlock(&mtx);
 		
@@ -178,7 +194,7 @@ void *client_handler(void *client_fd)
 		    memset(http_header, '\0', sizeof(http_header));
 		    memset(path, '\0', sizeof(path));
 		    memset(method, '\0', sizeof(method));
-		    return NULL;
+		    continue;
 		}
 		
 		if (!strcmp(method, "STATS"))
@@ -191,14 +207,14 @@ void *client_handler(void *client_fd)
 		    memset(http_header, '\0', sizeof(http_header));
 		    memset(path, '\0', sizeof(path));
 		    memset(method, '\0', sizeof(method));
-		    return NULL;
+		    continue;
 		}
 		else if(!strcmp(method, "SHUTDOWN"))
 		{
 		    printf("Terminating server...\n");
 		        //close(server_socket_fd);
 
-		    return NULL;
+		    continue;
 		}
 		
 		strcat(dir, path);
@@ -241,8 +257,13 @@ void *client_handler(void *client_fd)
 		        }
 		    }
 
+		    //close(client_socket_fd);
+		    pthread_mutex_lock(&mtx);
 		    close(client_socket_fd);
-		    return NULL;
+		    free(p);
+		    pthread_mutex_unlock(&mtx);
+		    //return NULL;
+		    continue;
 		}
 		    
 		read(fd, buffer, sizeof(buffer));
@@ -264,11 +285,13 @@ void *client_handler(void *client_fd)
 		memset(dir, '\0', sizeof(dir));
 		memset(path, '\0', sizeof(path));
 
+        pthread_mutex_lock(&mtx);
 		close(client_socket_fd);
-		fl = 0;
+		free(p);
+		pthread_mutex_unlock(&mtx);
     }
 
-    return NULL;
+    pthread_exit(NULL);
 }
 
 
