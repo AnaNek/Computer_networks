@@ -1,15 +1,5 @@
 #include "server.h"
 
-struct file_node* fhead = NULL;
-struct node* head = NULL;
-int fl = 0;
-
-pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
-pthread_cond_t cond2 = PTHREAD_COND_INITIALIZER;
-
-char dir[1024];
-
 /* 
    Добавить обработчик сигнала 
    Написать структуру списка и функции для работы с ней
@@ -24,26 +14,14 @@ int main(int argc, char *argv[])
     int opt = 0;
     int serving_port = 0;
     int num_of_threads = 0;
-    char root_dir[128];
-    int i;
-    struct file_node* file;
-    char http_header[BUFFER_SIZE];
     int server_socket_fd, client_socket_fd;
     struct sockaddr_in address, caddr;
     socklen_t clientlen;
-    char request[1024];
-    char path[1024];
-    //char dir[1024];
-    char method[3];
-    struct node *list_node;
-    int fd;
-    int total_pages = 0, total_bytes = 0;
+    node_t *list_node;
     fd_set set;
-    int maxfd, sockfd;
-    //int status;
     
-    //clock_t begin = clock();
-    
+    struct node* head = NULL;
+        
     while ((opt = getopt(argc, argv, "p:t:d:")) != -1)
     {
         switch(opt)
@@ -63,9 +41,9 @@ int main(int argc, char *argv[])
     pthread_t *thread_ids = malloc(num_of_threads * (sizeof(pthread_t)));
 
     //Create thread pool
-    for ( i = 0 ; i < num_of_threads ; i ++)
+    for (int i = 0 ; i < num_of_threads ; i ++)
     {
-        pthread_create(&thread_ids[i], NULL, client_handler, &client_socket_fd);
+        pthread_create(&thread_ids[i], NULL, client_handler, &head);
     }
     
     if ((server_socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
@@ -103,8 +81,6 @@ int main(int argc, char *argv[])
     {
         sleep(1);
         puts("Waiting for connections...");
-        
-        strcpy(dir, root_dir);
 
         if (select(server_socket_fd + 1, &set, NULL, NULL, NULL) <= 0)
         {
@@ -122,11 +98,8 @@ int main(int argc, char *argv[])
         printf("Client connected to port: %d\n", ntohs(caddr.sin_port));
         
         pthread_mutex_lock(&mtx);
-        //fl = 1;
-        list_node = malloc(sizeof(struct node));
-        list_node -> fd = client_socket_fd;
-        list_node -> next = head;
-        head = list_node;
+
+        push(&head, client_socket_fd);
         
         pthread_cond_signal(&cond);
         pthread_mutex_unlock(&mtx);
@@ -138,137 +111,123 @@ int main(int argc, char *argv[])
 }
 
 
-void *client_handler(void *client_fd)
+void *client_handler(void *arg)
 {
-    struct node *p;
-    struct file_node *f;
+    node_t *p;
     char buffer[BUFFER_SIZE];
     
     int client_socket_fd;
-    char root_dir[128];
-    int i;
-    struct file_node* file;
+    char dir[1024];
     char http_header[BUFFER_SIZE];
-    //int server_socket_fd, client_socket_fd;
-    struct sockaddr_in address, caddr;
-    socklen_t clientlen;
     char request[1024];
     char path[1024];
-    //char dir[1024];
     char method[3];
-    //struct node *p;
     int fd;
     int total_pages = 0, total_bytes = 0;
-    //fd_set readfds;
-    int maxfd, sockfd;
+    node_t **list_head = NULL;
     
     clock_t begin = clock();
       
     while (1)
     {
-		printf("Thread %lu \n", pthread_self());
-		pthread_mutex_lock(&mtx);
+        printf("Thread %lu \n", pthread_self());
+        pthread_mutex_lock(&mtx);
 		    
-		while (head == NULL)
-		{
-		    pthread_cond_wait(&cond, &mtx);
-		}
+        list_head = (node_t **)arg;
+        while (*list_head == NULL)
+	{
+            pthread_cond_wait(&cond, &mtx);
+	}
 		
-		p = head;
-		client_socket_fd = p->fd;
-        head = head -> next;
-        
-		//client_socket_fd = *(int *)client_fd;
-		printf("Thread %lu started...\n", pthread_self());
-		pthread_mutex_unlock(&mtx);
+	p = pop(list_head);
+	client_socket_fd = p->fd;
 		
-		recv(client_socket_fd, &request, sizeof(request), 0);
+	printf("Thread %lu started...\n", pthread_self());
+	pthread_mutex_unlock(&mtx);
+		
+	recv(client_socket_fd, &request, sizeof(request), 0);
 
-		sscanf(request,"%s%s", method, path);
+	sscanf(request,"%s%s", method, path);
 		    
-		if (strcmp(method, "GET") && strcmp(method, "STATS") && strcmp(method, "SHUTDOWN"))
-		{
-		    snprintf(http_header, sizeof(http_header), "Usage: GET </siteA/pageA_B.html> OR STATS/SHUTDOWN\n");
-		    send(client_socket_fd, http_header, sizeof(http_header), 0);
-
-		    memset(http_header, '\0', sizeof(http_header));
-		    memset(path, '\0', sizeof(path));
-		    memset(method, '\0', sizeof(method));
-		    continue;
-		}
+	if (strcmp(method, "GET") && strcmp(method, "STATS") && strcmp(method, "SHUTDOWN"))
+	{
+	    snprintf(http_header, sizeof(http_header), "Usage: GET </siteA/pageA_B.html> OR STATS/SHUTDOWN\n");
+            send(client_socket_fd, http_header, sizeof(http_header), 0);
+            memset(http_header, '\0', sizeof(http_header));
+            memset(path, '\0', sizeof(path));
+            memset(method, '\0', sizeof(method));
+            continue;
+        }
 		
-		if (!strcmp(method, "STATS"))
-		{
-		    clock_t end = clock();
-		    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-		    snprintf(http_header, sizeof(http_header), "Server up for %f, served %d pages, %d bytes\n", time_spent, total_pages, total_bytes);
-		    send(client_socket_fd, http_header, sizeof(http_header), 0);
-
-		    memset(http_header, '\0', sizeof(http_header));
-		    memset(path, '\0', sizeof(path));
-		    memset(method, '\0', sizeof(method));
-		    continue;
-		}
-		else if(!strcmp(method, "SHUTDOWN"))
-		{
-		    printf("Terminating server...\n");
+	if (!strcmp(method, "STATS"))
+	{
+	    clock_t end = clock();
+	    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+	    snprintf(http_header, sizeof(http_header), "Server up for %f, served %d pages, %d bytes\n", time_spent, total_pages, total_bytes);
+	    send(client_socket_fd, http_header, sizeof(http_header), 0);
+	    memset(http_header, '\0', sizeof(http_header));
+	    memset(path, '\0', sizeof(path));
+	    memset(method, '\0', sizeof(method));
+	    continue;
+	}
+	else if(!strcmp(method, "SHUTDOWN"))
+	{
+	    printf("Terminating server...\n");
 		        //close(server_socket_fd);
-
-		    continue;
-		}
+	    continue;
+	}
+	
+	char *ptr = get_stat(stats, sizeof(stats), 0);	
+	strcpy(dir, root_dir);
 		
-		strcat(dir, path);
-		    
-		if ((fd = open(dir, O_RDONLY)) == -1)
+	strcat(dir, path);
+		
+	if ((fd = open(dir, O_RDONLY)) == -1)
+	{
+	    if (access(dir, R_OK) != 0)
+	    {
+	        if (errno == EACCES)
 		{
-
-		    if (access(dir, R_OK) != 0)
-		    {
-		        if (errno == EACCES)
-		        {
-		            snprintf(http_header, sizeof(http_header), "\nHTTP/1.1 403 Forbidden\r\n"
+		    snprintf(http_header, sizeof(http_header), "\nHTTP/1.1 403 Forbidden\r\n"
 		                         "Server: myhttpd/1.0.0 (Ubuntu64)\r\n"
 		                         "Date: %s\r\n"
 		                         "Content-Type: text/html\r\n"
 		                         "Connection: Closed\r\n\r\n",
 		                         get_current_date(date, sizeof(date)));
-		            send(client_socket_fd, http_header, sizeof(http_header), 0);
+		    send(client_socket_fd, http_header, sizeof(http_header), 0);
 
-		            printf("File \"%s\" is not accessible\n", dir);
-		            memset(http_header, '\0', sizeof(http_header));
-		            memset(dir, '\0', sizeof(dir));
-		            memset(path, '\0', sizeof(path));
-		        }
-		        else
-		        {
-
-		            snprintf(http_header, sizeof(http_header), "\nHTTP/1.1 404 Not Found\r\n"
-		                         "Server: myhttpd/1.0.0 (Ubuntu64)\r\n"
-		                         "Date: %s\r\n"
-		                         "Content-Type: text/html\r\n"
-		                         "Connection: Closed\r\n\r\n",
-		                         get_current_date(date, sizeof(date)));
-		            send(client_socket_fd, http_header, sizeof(http_header), 0);
-
-		            printf("File \"%s\" does not exist\n", dir);
-		            memset(http_header, '\0', sizeof(http_header));
-		            memset(dir, '\0', sizeof(dir));
-		            memset(path, '\0', sizeof(path));
-		        }
-		    }
-
-		    //close(client_socket_fd);
-		    pthread_mutex_lock(&mtx);
-		    close(client_socket_fd);
-		    free(p);
-		    pthread_mutex_unlock(&mtx);
-		    //return NULL;
-		    continue;
+		    printf("File \"%s\" is not accessible\n", dir);
+		    memset(http_header, '\0', sizeof(http_header));
+		    memset(dir, '\0', sizeof(dir));
+		    memset(path, '\0', sizeof(path));
 		}
+		else
+		{
+		    snprintf(http_header, sizeof(http_header), "\nHTTP/1.1 404 Not Found\r\n"
+		                         "Server: myhttpd/1.0.0 (Ubuntu64)\r\n"
+		                         "Date: %s\r\n"
+		                         "Content-Type: text/html\r\n"
+		                         "Connection: Closed\r\n\r\n",
+		                         get_current_date(date, sizeof(date)));
+		    send(client_socket_fd, http_header, sizeof(http_header), 0);
+
+		    printf("File \"%s\" does not exist\n", dir);
+		    memset(http_header, '\0', sizeof(http_header));
+		    memset(dir, '\0', sizeof(dir));
+		    memset(path, '\0', sizeof(path));
+		}
+	    }
+
+	    pthread_mutex_lock(&mtx);
+            close(client_socket_fd);
+	    free(p);
+            pthread_mutex_unlock(&mtx);
+	    continue;
+	}
 		    
-		read(fd, buffer, sizeof(buffer));
+	read(fd, buffer, sizeof(buffer));
 		
-		snprintf(http_header, sizeof(http_header), "\nHTTP/1.1 200 OK\r\n"
+	snprintf(http_header, sizeof(http_header), "\nHTTP/1.1 200 OK\r\n"
 		             "Server: myhttpd/1.0.0 (Ubuntu64)\r\n"
 		             "Date: %s\r\n"
 		             "Content-Type: text/html\r\n"
@@ -277,18 +236,18 @@ void *client_handler(void *client_fd)
 		             get_current_date(date, sizeof(date)),
 		             strlen(buffer));
 
-		strcat(http_header, buffer);
-		send(client_socket_fd, http_header, sizeof(http_header), 0);
-		printf("File \"%s\" has been sent to client\n", dir);
+	strcat(http_header, buffer);
+	send(client_socket_fd, http_header, sizeof(http_header), 0);
+	printf("File \"%s\" has been sent to client\n", dir);
 
-		memset(http_header, '\0', sizeof(http_header));
-		memset(dir, '\0', sizeof(dir));
-		memset(path, '\0', sizeof(path));
+	memset(http_header, '\0', sizeof(http_header));
+	memset(dir, '\0', sizeof(dir));
+	memset(path, '\0', sizeof(path));
 
         pthread_mutex_lock(&mtx);
-		close(client_socket_fd);
-		free(p);
-		pthread_mutex_unlock(&mtx);
+	close(client_socket_fd);
+	free(p);
+	pthread_mutex_unlock(&mtx);
     }
 
     pthread_exit(NULL);
@@ -301,6 +260,44 @@ char *get_current_date(char *str, int len)
     struct tm res;
 
     strftime(str, len, RFC1123FMT, localtime_r(&t, &res));
+    return str;
+}
+
+char *get_stat(char *str, int len, bool get)
+{
+    time_t t = time(NULL);
+    struct tm res;
+    static int days[7] = {0};
+    static int hours[24] = {0};
+    static int total_requests = 0;
+    char buf[256];
+    const char *day_names[7] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    localtime_r(&t, &res);
+    
+    hours[res.tm_hour] += 1;
+    days[res.tm_wday] += 1;
+    total_requests++;
+    
+    if (get)
+    {
+        return NULL;
+    }
+    
+    memset(str, '\0', len);
+    for (int i = 0; i < 24; i++)
+    {
+        snprintf(buf, sizeof(buf), "%d %g %% \n", i, hours[i] / (double)total_requests * 100);
+        strcat(str, buf);
+        memset(buf, '\0', sizeof(buf));
+    }
+    
+    for (int i = 0; i < 7; i++)
+    {
+        snprintf(buf, sizeof(buf), "%s %g %% \n", day_names[i], days[i] / (double)total_requests * 100);
+        strcat(str, buf);
+        memset(buf, '\0', sizeof(buf));
+    }
+    printf("%s\n", str);
     return str;
 }
 
