@@ -27,6 +27,7 @@ void free_list(node_t **head)
     while (cur != NULL)
     {
         next = cur->next;
+        close(cur->fd);
         free(cur);
         cur = next;
     }

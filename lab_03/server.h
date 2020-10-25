@@ -20,9 +20,13 @@
 
 void *client_handler(void *);
 char *get_current_date(char *, int);
-char *get_stat(char *, int, bool);
+void update_stat(void);
+
 char date[128];
 char stats[1024];
+int server_socket_fd = 0;
+node_t * head = NULL;
+int shutd;
 
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
