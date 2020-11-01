@@ -21,7 +21,6 @@ int main(int argc, char *argv[])
     fd_set set;
     head = NULL;
         
-    shutd = 0;
     while ((opt = getopt(argc, argv, "p:t:d:")) != -1)
     {
         switch(opt)
@@ -92,12 +91,7 @@ int main(int argc, char *argv[])
             perror("select");
             exit(EXIT_FAILURE);
         }
-           
-        if (shutd)
-        { 
-            break;
-        }
-             
+                     
         if (FD_ISSET(server_socket_fd, &set))
         {      
             clientlen = sizeof(caddr);
@@ -147,10 +141,6 @@ void *client_handler(void *arg)
       
     while (1)
     {
-        if (shutd)
-        {
-            pthread_exit(NULL);
-        }
         printf("Thread %lu \n", pthread_self());
         pthread_mutex_lock(&mtx);
 		    
@@ -170,9 +160,9 @@ void *client_handler(void *arg)
         sscanf(request,"%s%s", method, path);
         
         update_stat();
-        if (strcmp(method, "GET") && strcmp(method, "STATS") && strcmp(method, "SHUTDOWN"))
+        if (strcmp(method, "GET") && strcmp(method, "STATS"))
         {
-            snprintf(http_header, sizeof(http_header), "Usage: GET </siteA/pageA_B.html> OR STATS/SHUTDOWN\n");
+            snprintf(http_header, sizeof(http_header), "Usage: GET </siteA/pageA_B.html> OR STATS\n");
             send(client_socket_fd, http_header, sizeof(http_header), 0);
             memset(http_header, '\0', sizeof(http_header));
             memset(path, '\0', sizeof(path));
@@ -193,17 +183,7 @@ void *client_handler(void *arg)
             memset(method, '\0', sizeof(method));
             continue;
         }
-        else if (!strcmp(method, "SHUTDOWN"))
-        {
-            printf("Terminating server...\n");
-            pthread_mutex_lock(&mtx);
-            close(client_socket_fd);
-            free(p);
-            shutd = 1;
-            shutdown(server_socket_fd, 2);
-            pthread_mutex_unlock(&mtx);
-            pthread_exit(NULL);
-        }
+
         strcpy(dir, root_dir);
         strcat(dir, path);
         

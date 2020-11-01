@@ -13,18 +13,18 @@
 
 #define BUFFER_SIZE 128000
 
-//run with ./client address port
+// ./client address port
 
 int main(int argc, char *argv[])
 {
 
     char *address = argv[1];
     int port = atoi(argv[2]);
-
+    int rc = 0;
     int client_socket_fd;
 
 
-    //Create socket
+    //Создание сокета
 
     if ((client_socket_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
     {
@@ -60,7 +60,11 @@ int main(int argc, char *argv[])
 
     send(client_socket_fd, request, sizeof(request), 0);
 
-    recv(client_socket_fd, &response, sizeof(response), MSG_WAITALL);
+    rc = recv(client_socket_fd, &response, sizeof(response), MSG_WAITALL);
+    if (!rc)
+    {
+        printf("Connection reset\n");
+    }
 
     printf("\n%s\n", response);
 
