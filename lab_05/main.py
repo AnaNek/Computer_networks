@@ -35,7 +35,7 @@ def main():
       
     msg = MIMEMultipart()
     msg['From'] = sender_address
-    msg['To'] = COMMASPACE.join(receiver_address)
+    msg['To'] = receiver_address
     msg['Date'] = formatdate(localtime=True)
     msg['Subject'] = 'Computer networks: lab_05'
     msg.attach(MIMEText(message_body, 'plain'))  
@@ -52,9 +52,7 @@ def main():
         
     try:
         server_ssl = smtplib.SMTP_SSL(host, port)
-        server_ssl.ehlo()
         server_ssl.login(sender_address, password)
-        server_ssl.ehlo()
         time.sleep(interval)
         server_ssl.sendmail(sender_address, receiver_address, msg.as_string())
             
